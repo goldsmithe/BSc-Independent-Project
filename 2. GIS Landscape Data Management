@@ -1,0 +1,226 @@
+#1. GIS data compliation and management
+#Includes the:
+#Sum of shapefile data for future statistical analysis
+#Compliation of shapefile and landcover data of different years into single dataframes
+#Filtering and removal of data columns
+
+#2014 GIS shapefile dataframe compilation
+LOC_ID <- read.csv("LOC_ID_2014.csv")
+Car_Pathways <- read.csv("Car_Pathways.csv")
+Pedestrian_Pathways <- read.csv("Pedestrian_Pathways.csv")
+Buildings <- read.csv("Buildings.csv")
+Greenspaces <- read.csv("Greenspaces.csv")
+Lakes <- read.csv("Lakes.csv")National_Parks <- read.csv("National_Parks.csv")
+Rivers <- read.csv("Rivers.csv")
+
+#Column filtering
+Car_Pathways <- Car_Pathways[,c(12, 65),]
+Pedestrian_Pathways <- Pedestrian_Pathways[,c(12, 65),]
+Buildings <- Buildings[,c(6,53,94),]
+Greenspaces <- Greenspaces[,c(57,41,98),]
+Lakes <- Lakes[,c(19,60),]
+National_Parks <-National_Parks[,c(21, 62),]
+Rivers <- Rivers[,c(20,60),]
+
+#Counting how many different roads/rivers/etc are within each LOC_ID
+#Excluding car pathways, pedestrian pathways, rivers, lakes and National Parks due to insufficient data
+Buildings2 <- Buildings %>% count(LOC_ID, ID)
+Buildings2 <- aggregate(n ~ LOC_ID, Buildings2, sum)
+colnames(Buildings2)[2] <- "Building Count"
+Greenspaces2 <-Greenspaces %>% count(LOC_ID, id)
+Greenspaces2 <- aggregate(n ~ LOC_ID, Greenspaces2, sum)
+colnames(Greenspaces2)[2] <- "Greenspace Count"
+
+#Counting amount of variables within LOC_IDs (i.e. km, km2)
+Car_Pathways <- aggregate(Shape_Le_2 ~ LOC_ID, Car_Pathways, sum)
+Pedestrian_Pathways <- aggregate(Shape_Le_2 ~ LOC_ID, Pedestrian_Pathways, sum)
+Buildings<- aggregate(Shape_Area ~ LOC_ID, Buildings, sum)
+Greenspaces<-aggregate(Shape_Area ~ LOC_ID, Greenspaces, sum)
+Lakes<- aggregate(Shape_Area~ LOC_ID, Lakes, sum)
+National_Parks<-aggregate(Shape_Area ~ LOC_ID, National_Parks, sum)
+Rivers<-aggregate(Shape_Le_2 ~ LOC_ID, Rivers,sum)
+colnames(Car_Pathways)[2] <- "Length (km)"
+colnames(Pedestrian_Pathways)[2] <- "Length (km)"
+colnames(Buildings)[2] <- "Area (km)"
+colnames(Greenspaces)[2] <- "Area (km)"
+colnames(Lakes)[2] <- "Area (km)"
+colnames(National_Parks)[2] <- "Area (km)"
+colnames(Rivers)[2] <- "Length (km)"
+
+#Inputting landcover columns into single dataset
+Landscape_2014 <- left_join(LOC_ID, Car_Pathways, by = "LOC_ID")
+colnames(Landscape_2014)[2] <- "Motor Path Length (km)"
+Landscape_2014 <- left_join(Landscape_2014, Pedestrian_Pathways, by = "LOC_ID")
+colnames(Landscape_2014)[3] <- "Pedestrian Path Length (km)"
+Landscape_2014 <- left_join(Landscape_2014, Buildings, by = "LOC_ID")
+colnames(Landscape_2014)[4] <- "Building Area (km2)"
+Landscape_2014 <- left_join(Landscape_2014, Buildings2, by = "LOC_ID")
+colnames(Landscape_2014)[5] <- "Building Count"
+Landscape_2014 <- left_join(Landscape_2014, Greenspaces, by = "LOC_ID")colnames(Landscape_2014)[6] <- "Greenspace Area (km2)"
+Landscape_2014 <- left_join(Landscape_2014, Greenspaces2, by = "LOC_ID")
+colnames(Landscape_2014)[7] <- "Greenspace Count"
+Landscape_2014 <- left_join(Landscape_2014, Lakes, by = "LOC_ID")
+colnames(Landscape_2014)[8] <- "Lake Area (km2)"
+Landscape_2014 <- left_join(Landscape_2014, National_Parks, by = "LOC_ID")
+colnames(Landscape_2014)[9] <- "National Park Area (km2)"
+Landscape_2014 <- left_join(Landscape_2014, Rivers, by = "LOC_ID")
+colnames(Landscape_2014)[10] <- "River Length (km)"
+
+#setting NA values to 0
+Landscape_2014[is.na(Landscape_2014)] <- 0
+
+#writing file
+write.csv(Landscape_2014, "Landscape_2014.csv")
+#------------------------------------------------------------------------------------------------------------
+
+#2015 GIS shapefile dataframe compilation
+#reading csv files into R environment
+LOC_ID <- read.csv("LOC_ID_2015.csv")
+Car_Pathways <- read.csv("Car_Pathways.csv")
+Pedestrian_Pathways <- read.csv("Pedestrian_Pathways.csv")
+Buildings<-read.csv("Buildings.csv")
+Greenspaces <-read.csv("Greenspaces.csv")
+Lakes <-read.csv("Lakes.csv")
+National_Parks<-read.csv("National_Parks.csv")
+Rivers <-read.csv("Rivers.csv")
+
+#Counting how many different roads/rivers/etc are within each LOC_ID
+#Excluding car pathways, pedestrian pathways, rivers, lakes and National Parks due to insufficient data
+numbers
+Buildings2 <- Buildings %>% count(LOC_ID, ID)
+Buildings2 <- aggregate(n ~ LOC_ID, Buildings2, sum)
+colnames(Buildings2)[2] <- "Building Count"
+Greenspaces2 <-Greenspaces %>% count(LOC_ID, id)
+Greenspaces2 <- aggregate(n ~ LOC_ID, Greenspaces2, sum)
+colnames(Greenspaces2)[2] <- "Greenspace Count"
+#now count how much of a variable are within each loc_id (how much road - km, how much national park - km2)
+Car_Pathways <- aggregate(Shape_Le_2 ~ LOC_ID, Car_Pathways, sum)
+Pedestrian_Pathways <- aggregate(Shape_Le_2 ~ LOC_ID, Pedestrian_Pathways, sum)
+Buildings<- aggregate(Shape_Area ~ LOC_ID, Buildings, sum)
+Greenspaces<-aggregate(Shape_Area ~ LOC_ID, Greenspaces, sum)
+Lakes<- aggregate(Shape_Area~ LOC_ID, Lakes, sum)
+National_Parks<-aggregate(Shape_Area ~ LOC_ID, National_Parks, sum)
+Rivers<-aggregate(Shape_Le_2 ~ LOC_ID, Rivers,sum)
+colnames(Car_Pathways)[2] <- "Length (km)"colnames(Pedestrian_Pathways)[2] <- "Length (km)"
+colnames(Buildings)[2] <- "Area (km)"
+colnames(Greenspaces)[2] <- "Area (km)"
+colnames(Lakes)[2] <- "Area (km)"
+colnames(National_Parks)[2] <- "Area (km)"
+colnames(Rivers)[2] <- "Length (km)"
+
+#Inputting landcover columns into single dataset
+Landscape_2015 <- left_join(LOC_ID, Car_Pathways, by = "LOC_ID")
+colnames(Landscape_2015)[2] <- "Motor Path Length (km)"
+Landscape_2015 <- left_join(Landscape_2015, Pedestrian_Pathways, by = "LOC_ID")
+colnames(Landscape_2015)[3] <- "Pedestrian Path Length (km)"
+Landscape_2015 <- left_join(Landscape_2015, Buildings, by = "LOC_ID")
+colnames(Landscape_2015)[4] <- "Building Area (km2)"
+Landscape_2015 <- left_join(Landscape_2015, Buildings2, by = "LOC_ID")
+colnames(Landscape_2015)[5] <- "Building Count"
+Landscape_2015 <- left_join(Landscape_2015, Greenspaces, by = "LOC_ID")
+colnames(Landscape_2015)[6] <- "Greenspace Area (km2)"
+Landscape_2015 <- left_join(Landscape_2015, Greenspaces2, by = "LOC_ID")
+colnames(Landscape_2015)[7] <- "Greenspace Count"
+Landscape_2015 <- left_join(Landscape_2015, Lakes, by = "LOC_ID")
+colnames(Landscape_2015)[8] <- "Lake Area (km2)"
+Landscape_2015 <- left_join(Landscape_2015, National_Parks, by = "LOC_ID")
+colnames(Landscape_2015)[9] <- "National Park Area (km2)"
+Landscape_2015 <- left_join(Landscape_2015, Rivers, by = "LOC_ID")
+colnames(Landscape_2015)[10] <- "River Length (km)"
+
+#setting NA values to 0
+Landscape_2015[is.na(Landscape_2015)] <- 0
+
+#writing file
+write.csv(Landscape_2015, "Landscape_2015.csv")
+#------------------------------------------------------------------------------------------------------------------
+
+#2014 LCM
+#reading csv files into R environment
+points_2014 <- read.csv("2014_points.csv")
+Broadleaf <- read.csv("Broadleaf_Land_Cover_2014.csv")
+Conifer <- read.csv("Conf_Land_Cover_2014.csv")
+Arable <- read.csv("Arable_Land_Cover_2014.csv")
+Grassland <- read.csv("Grassland_Land_Cover_2014.csv")
+Wetland <- read.csv("Wetland_Land_Cover_2014.csv")
+Sediment <- read.csv("Rock & Sediment Land Cover_2014.csv")
+Urban <- read.csv("Urban_Land_Cover_2014.csv")
+Suburban <- read.csv("Suburban_Land_Cover_2014.csv")
+#sorting landcover columns
+Broadleaf <- Broadleaf[, c(4, 7)]
+Conifer <- Conifer[, c(4, 7)]
+Arable <- Arable[,c(3,5)]Grassland <- Grassland[, c(4, 7)]
+Wetland <- Wetland[, c(4, 7)]
+Sediment <- Sediment[, c(4, 7)]
+Urban <- Urban[, c(4, 7)]
+Suburban <- Suburban[, c(4, 7)]
+
+#Inputting landcover columns into single dataset
+Landcover_2014 <- left_join(points_2014, Broadleaf, by = "LOC_ID")
+colnames(Landcover_2014)[10] <- "Broadleaf"
+Landcover_2014 <- left_join(Landcover_2014, Conifer, by = "LOC_ID")
+colnames(Landcover_2014)[11] <- "Conifer"
+Landcover_2014 <- left_join(Landcover_2014, Arable, by = "LOC_ID")
+colnames(Landcover_2014)[12] <- "Arable"
+Landcover_2014 <- left_join(Landcover_2014, Grassland, by = "LOC_ID")
+colnames(Landcover_2014)[13] <- "Grassland"
+Landcover_2014 <- left_join(Landcover_2014, Wetland, by = "LOC_ID")
+colnames(Landcover_2014)[14] <- "Wetland"
+Landcover_2014 <- left_join(Landcover_2014, Sediment, by = "LOC_ID")
+colnames(Landcover_2014)[15] <- "Sediment"
+Landcover_2014 <- left_join(Landcover_2014, Urban, by = "LOC_ID")
+colnames(Landcover_2014)[16] <- "Urban"
+Landcover_2014 <- left_join(Landcover_2014, Suburban, by = "LOC_ID")
+colnames(Landcover_2014)[17] <- "Suburban"
+
+#setting NA values to 0
+Landcover_2014[is.na(Landcover_2014)] <- 0
+
+#writing file
+write.csv(Landcover_2014, "Landcover_2014.csv")
+#-------------------------------------------------------------------------------
+
+#2015 LCM
+#reading csv files into R environment
+points_2015 <- read.csv("2015_points.csv")
+Broadleaf <- read.csv("Broadleaf_Land_Cover_2015.csv")
+Conifer <- read.csv("Conf_Land_Cover_2015.csv")
+Arable <- read.csv("Arable_Land_Cover_2015.csv")
+Grassland <- read.csv("Grassland_Land_Cover_2015.csv")
+Wetland <- read.csv("Wetlands Land Cover_2015.csv")
+Sediment <- read.csv("Rock_&_Sediment_Land_Cover_2015.csv")
+Urban <- read.csv("Urban_Land Cover_2015.csv")
+Suburban <- read.csv("Suburban_Land_Cover_2015.csv")
+
+#sorting landcover columns
+Broadleaf <- Broadleaf[, c(4, 7)]
+Conifer <- Conifer[, c(4, 7)]
+Arable <- Arable[,c(4,7)]
+Grassland <- Grassland[, c(4, 7)]
+Wetland <- Wetland[, c(4, 7)]
+Sediment <- Sediment[, c(4, 7)]
+Urban <- Urban[, c(4, 7)]Suburban <- Suburban[, c(4, 7)]
+
+#Inputting landcover columns into single dataset
+Landcover_2015 <- left_join(points_2015, Broadleaf, by = "LOC_ID")
+colnames(Landcover_2015)[10] <- "Broadleaf"
+Landcover_2015 <- left_join(Landcover_2015, Conifer, by = "LOC_ID")
+colnames(Landcover_2015)[11] <- "Conifer"
+Landcover_2015 <- left_join(Landcover_2015, Arable, by = "LOC_ID")
+colnames(Landcover_2015)[12] <- "Arable"
+Landcover_2015 <- left_join(Landcover_2015, Grassland, by = "LOC_ID")
+colnames(Landcover_2015)[13] <- "Grassland"
+Landcover_2015 <- left_join(Landcover_2015, Wetland, by = "LOC_ID")
+colnames(Landcover_2015)[14] <- "Wetland"
+Landcover_2015 <- left_join(Landcover_2015, Sediment, by = "LOC_ID")
+colnames(Landcover_2015)[15] <- "Sediment"
+Landcover_2015 <- left_join(Landcover_2015, Urban, by = "LOC_ID")
+colnames(Landcover_2015)[16] <- "Urban"
+Landcover_2015 <- left_join(Landcover_2015, Suburban, by = "LOC_ID")
+colnames(Landcover_2015)[17] <- "Suburban"
+
+#setting NA values to 0
+Landcover_2015[is.na(Landcover_2015)] <- 0
+
+#writing file
+write.csv(Landcover_2015, "Landcover_2015.csv")
