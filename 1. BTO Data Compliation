@@ -1,0 +1,362 @@
+#Section 1 includes the following processes:
+#Filtering the data by time: week, month, year and season
+#Testing for sampling effort
+#Changing data from long to wide format
+#Data correction, error management and removal
+#Biodiversity data management (i.e. Simpsons Diversity)
+#Data complication, merging, joining (i.e. inner, right, left)
+#Writing data into file (i.e. CSV)
+
+#Read R packages in
+library(tidyverse)
+library(lubridate)
+library(purrr)
+library(readxl)
+library(vegan)
+library(purrr) 
+
+#Read the dataframes into R and filter by week, month, year and season
+BTO_Data <- read.csv("Complete_bird_cases.csv")
+BTO_Data <- BTO_Data[, -c(1, 2, 9, 10, 13, 14, 15, 16 )]
+#Further filtering; this involves selecting out the weeks, months, year and creating seasons
+week <- week(BTO_Data$OBS_DT)
+week <- data.frame(week)
+year <- year(BTO_Data$OBS_DT)
+year <- data.frame(year)
+month <- month(BTO_Data$OBS_DT)
+month <- data.frame(month)
+Bird_Data <- cbind(week, month, year, BTO_Data)
+Bird_Data$season <- ifelse(Bird_Data$month %in% c(3, 4, 5), "Spring",
+ ifelse(Bird_Data$month %in% c(6, 7, 8), "Summer",
+ ifelse(Bird_Data$month %in% c(9, 10, 11), "Autumn", ifelse(Bird_Data$month %in% c(12, 1, 2), "Winter", NA)
+ )
+ )
+)
+
+#Filter the dataset via columns
+Bird_Data <- Bird_Data[, c(1, 2, 14, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)]
+Bird_Data <- Bird_Data[,-c(12)]
+rm(week, month, year)
+#remove duplicate entries so only unique entires remain & test for sampling effort (Winter and Summer 
+weekly submissions)
+Bird_Counts <-subset(Bird_Data,as.logical(ave(LOC_ID, year,season, week, FUN = Negate(duplicated))))
+Bird_Counts <- Bird_Counts %>% count(LOC_ID, season, year)
+Bird_Counts <- Bird_Counts[Bird_Counts$year %in% c(2014, 2015),]
+Bird_Counts <- Bird_Counts[Bird_Counts$season %in% c("Winter", "Summer"),]
+
+#Split the sampling effort into years into wide format
+Bird_Counts <- Bird_Counts %>%
+ pivot_longer(cols = n) %>%
+ mutate(year = recode(year, `2014` = 'year_2014', `2015` = 'year_2015')) %>%
+ pivot_wider(names_from = year, values_from = value)
+Bird_Counts <- Bird_Counts[, -3]
+
+#Sampling effort assessment for years 2014 and 2015 by the amount of times locality id's appeared by 
+season
+year_2014 <-Bird_Counts %>% 
+ mutate(names = cut(`year_2014`, # cut converts a numeric vector into a factor
+ breaks = c(1, 5, 9, 14), 
+ labels = c("small", "medium", "large")),
+ values = if_else(is.na(names), "NA" , "yes")) %>% # adds your "yes" values
+ pivot_wider(names_from = names, 
+ values_from = values) %>% # makes the cut labels into columns
+ select(-`NA`) %>% # an undesired `NA` column was created and needs to be removed
+ mutate(across(large:small, 
+ ~replace_na(., "no")))
+year_2015 <-Bird_Counts %>% 
+ mutate(names = cut(`year_2015`, # cut converts a numeric vector into a factor
+ breaks = c(1, 5, 9, 14), 
+ labels = c("small", "medium", "large")),
+ values = if_else(is.na(names), "NA" , "yes")) %>% # adds your "yes" values
+ pivot_wider(names_from = names, 
+ values_from = values) %>% # makes the cut labels into columns
+ select(-`NA`) %>% # an undesired `NA` column was created and needs to be removed
+ mutate(across(large:small, 
+ ~replace_na(., "no")))
+
+#Filter the sampling entry into a "yes" or "no" value to indicate if they appeared or not
+year_2015[which(year_2015[,4]== 1, ), 6] <- "yes"
+year_2014 <- year_2014[, -4]
+year_2015 <- year_2015[, -3]year_2015$medium[is.na(year_2015$medium)] <- "no"
+year_2015<-year_2015[complete.cases(year_2015),]
+year_2014<-year_2014[complete.cases(year_2014),]
+
+#Convert from long to wide format
+year_2015 <- year_2015 %>% pivot_longer(-c(1:3))
+year_2014 <- year_2014 %>% pivot_longer(-c(1:3))
+#remove those values with "no"
+year_2015<-year_2015[!year_2015$value == "no",]
+year_2014<-year_2014[!year_2014$value == "no",]
+
+#Remove "small" sampling efforts
+year_2015<-year_2015[!year_2015$name == "small",]
+year_2014<-year_2014[!year_2014$name == "small",]
+year_2015 <- year_2015[, -5]
+year_2014 <- year_2014[, -5]
+
+#Rename column
+colnames(year_2015)[4] <- "sample_size"
+colnames(year_2014)[4] <- "sample_size"
+
+#Read habitat into the environment
+habitat <- read_xlsx("habitat.xlsx")
+
+#Convert the dates into a name similar to the previous dataframe and filter the years
+colnames(habitat)[3] <- "OBS_DT"
+habitat$OBS_DT <- dmy(habitat$OBS_DT)
+
+#One of the values were incorrect so this was given the correct data
+habitat$OBS_DT[habitat$OBS_DT == "1977-01-01"] <- "1995-01-01"
+habitat <- habitat[, -c(2, 3)]
+
+#Take only unique entries from habitat locality ID and merge with both year 2014 and 2015
+habitat_unique <-subset(habitat,as.logical(ave(LOC_ID,GARDEN_SIZE, FUN = Negate(duplicated))))
+habitat_unique <- habitat_unique[, c(1,2)]
+year_2015 <- inner_join(year_2015, habitat_unique, by = "LOC_ID")
+year_2014 <- inner_join(year_2014, habitat_unique, by = "LOC_ID")
+
+#Filter the Bird_Data data for merging 
+bird_filter <- Bird_Data[, 3:13]
+bird_filter <-subset(bird_filter,as.logical(ave(LOC_ID, POSTCODE, season, year, ENGLISH_NAME, FUN = 
+Negate(duplicated))))
+
+#Merge the above dataframe with year_2014 and year_2015 which contains the habitat data
+year_2015 <- inner_join(bird_filter, year_2015, by = c("LOC_ID", "season"))
+year_2015 <- unique(year_2015)
+year_2014 <- inner_join(bird_filter, year_2014, by = c("LOC_ID", "season"))
+year_2014 <- unique(year_2014)
+#------------------------------------------------------------------------------------------------------------------------------
+
+#Read cats and bird food into the environmentcats <- read.csv("cats.csv")
+food <- read.csv("food.csv")
+Data_2014 <- year_2014[year_2014$year %in% c(2014), ]
+Data_2015 <- year_2015[year_2015$year %in% c(2015), ]
+
+#remove outlier bird sightings
+#Merge common bird species data - rename duplicate bird data
+#rename 'Pied Wagtail (yarrellii)'
+Data_2014$ENGLISH_NAME[Data_2014$ENGLISH_NAME %in% "Pied Wagtail (yarrellii)"] <- "Pied/White 
+Wagtail"
+Data_2015$ENGLISH_NAME[Data_2015$ENGLISH_NAME %in% "Pied Wagtail (yarrellii)"] <- "Pied/White 
+Wagtail"
+
+#remove mixed or potentially false data
+Data_2014 <- Data_2014[!(Data_2014$ENGLISH_NAME=="Carrion/Hooded Crow"),] #rm Hooded/Carrion 
+Crow (n=1)
+Data_2014 <- Data_2014[!(Data_2014$ENGLISH_NAME=="Kalij Pheasant"),] #rm Kalij Pheasant (n=2)
+Data_2014 <- Data_2014[!(Data_2014$ENGLISH_NAME=="Common/Lesser Redpoll"),] #rm Common/Lesser 
+Redpoll (n=3)
+Data_2015 <- Data_2015[!(Data_2015$ENGLISH_NAME=="Common/Lesser Redpoll"),] #rm Common/Lesser 
+Redpoll (n=4)
+Data_2014 <- Data_2014[!(Data_2014$ENGLISH_NAME=="Marsh/Willow Tit"),] #rm Marsh/Willow Tit 
+(n=12,n=21)
+Data_2015 <- Data_2015[!(Data_2015$ENGLISH_NAME=="Marsh/Willow Tit"),] #rm Marsh/Willow Tit 
+(n=12,n=19)
+Data_2014 <- Data_2014[!(Data_2014$ENGLISH_NAME=="Reeves's Pheasant"),] #rm Reeve's Pheasant (n=1)
+Data_2015 <- Data_2015[!(Data_2015$ENGLISH_NAME=="Reeves's Pheasant"),] #rm Reeve's Pheasant (n=1)
+Data_2014 <- Data_2014[!(Data_2014$ENGLISH_NAME=="Hybrid duck"),] #rm Hybrid duck (n=9)
+Data_2015 <- Data_2015[!(Data_2015$ENGLISH_NAME=="Hybrid duck"),] #rm Hybrid duck (n=1)
+
+#Preserve Data_2014 and Data_2015 for later richness calculations & abundance csv
+richness_2014 <- Data_2014
+richness_2015 <- Data_2015
+Abundance_2014 <- Data_2014
+Abundance_2015 <- Data_2015
+
+#pivot from long to wide format
+method_2014 <- Data_2014 %>% 
+ pivot_wider(names_from = ENGLISH_NAME, values_from = HOW_MANY)
+method_2015 <- Data_2015 %>% 
+ pivot_wider(names_from = ENGLISH_NAME, values_from = HOW_MANY)
+#Preparing diversity indices calculation for each locality id year per Summer and Winter 
+diversity_2014 <- method_2014[method_2014$year %in% 2014,]
+diversity_2015 <- method_2015[method_2015$year %in% 2015,]
+#apply sum function to all rows - to fill in NA values into 0
+diversity_2014 <- group_by(diversity_2014, season, year, POSTCODE, LOC_ID,SUB_ID, X, Y, LATITUDE, 
+LONGITUDE, sample_size, GARDEN_SIZE) %>%
+ summarize_all(~ map_dbl(., sum, na.rm = TRUE)) %>% ungroup()
+diversity_2015 <- group_by(diversity_2015, season, year, POSTCODE, LOC_ID,SUB_ID,X, Y, LATITUDE, 
+LONGITUDE, sample_size, GARDEN_SIZE) %>%
+ summarize_all(~ map_dbl(., sum, na.rm = TRUE)) %>%
+ ungroup()
+#preserve SUB_IDs and remove them for next step
+SUB_2014 <-diversity_2014
+SUB_2015 <-diversity_2015
+diversity_2014 <- diversity_2014 %>% select(-SUB_ID,-year_2014)
+diversity_2015 <- diversity_2015 %>% select(-SUB_ID,-year_2015)
+#sum all bird counts per species per season per locality ID - to find the Summer and Winter Simpsons 
+Diversity Indices per Season and LOC_ID
+diversity_2014 <-aggregate(. ~ season + year + POSTCODE + LOC_ID + X + Y + LATITUDE + LONGITUDE + 
+sample_size + GARDEN_SIZE, diversity_2014, sum)
+diversity_2015 <-aggregate(. ~ season + year + POSTCODE + LOC_ID + X + Y + LATITUDE + LONGITUDE + 
+sample_size + GARDEN_SIZE, diversity_2015, sum)
+
+#Sum across the values then calculate diversity into a column per season and locality ID
+diversity_2014 <- diversity(aggregate(. ~ season + year + LOC_ID + POSTCODE + X + Y + LATITUDE + 
+LONGITUDE + sample_size + GARDEN_SIZE , diversity_2014, sum)[, 11:95], MARGIN=1, index="simpson") 
+%>%
+ tibble(diversity=., ID=1:length(.)) %>%
+ right_join(diversity_2014 %>% mutate(ID=1:nrow(.)))
+diversity_2015 <- diversity(aggregate(. ~ season + year + LOC_ID + POSTCODE + X + Y + LATITUDE + 
+LONGITUDE + sample_size + GARDEN_SIZE , diversity_2015 , sum)[, 11:95], MARGIN=1, index="simpson") 
+%>%
+ tibble(diversity=., ID=1:length(.)) %>%
+ right_join(diversity_2015 %>% mutate(ID=1:nrow(.)))
+
+#Preserve diversity 'bird data' for abundance and richness calculations
+abundance_2014 <- diversity_2014
+abundance_2015 <- diversity_2015
+
+#Tidy diversity dataframes
+diversity_2014 <- diversity_2014[,c(1:12)]
+diversity_2015 <- diversity_2015[,c(1:12)]
+
+#Tidy SUB_ID dataframes
+SUB_2014 <- SUB_2014[,c(1:11),]
+SUB_2015 <- SUB_2015[,c(1:11),]
+
+#Re-add SUB_ID
+diversity_2014 <- inner_join(diversity_2014, SUB_2014, by = 
+c("season","year","POSTCODE","LOC_ID","X","Y","LATITUDE","LONGITUDE","sample_size","GARDEN_SIZE"))
+diversity_2015 <- inner_join(diversity_2015, SUB_2015, by = 
+c("season","year","POSTCODE","LOC_ID","X","Y","LATITUDE","LONGITUDE","sample_size","GARDEN_SIZE"))
+
+#Introduce cats dataframe into diversity dataframe
+cat_2014 <- left_join(diversity_2014, cats, by = "SUB_ID")cat_2014$HOW_MANY[is.na(cat_2014$HOW_MANY)] <- 0
+cat_2014 <- cat_2014[, -c(14:16)]
+cat_2014 <- aggregate(HOW_MANY ~ LOC_ID + season + year + POSTCODE + X + Y+ LONGITUDE + LATITUDE, 
+cat_2014, sum)
+cat_2014$HOW_MANY <- ifelse(cat_2014$HOW_MANY>0, 1, 0)
+colnames(cat_2014)[9] <- "cat_presence"
+cat_2015 <- left_join(diversity_2015, cats, by = "SUB_ID")
+cat_2015$HOW_MANY[is.na(cat_2015$HOW_MANY)] <- 0
+cat_2015 <- cat_2015[, -c(14:16)]
+cat_2015 <- aggregate(HOW_MANY ~ LOC_ID + season + year + POSTCODE + X + Y+ LONGITUDE + LATITUDE, 
+cat_2015, sum)
+cat_2015$HOW_MANY <- ifelse(cat_2015$HOW_MANY>0, 1, 0)
+colnames(cat_2015)[9] <- "cat_presence"
+
+#remove SUB_ID from diversity dataframes
+diversity_2014 <- diversity_2014 %>% select(-SUB_ID)
+diversity_2015 <- diversity_2015 %>% select(-SUB_ID)
+
+#Remove duplicated LOC_IDs due to SUB_ID
+diversity_2014 <- distinct(diversity_2014,LOC_ID, season,year,GARDEN_SIZE, .keep_all= TRUE)
+diversity_2015<-distinct(diversity_2015,LOC_ID,season,year,GARDEN_SIZE, .keep_all= TRUE)
+
+#Join cat presence with diversity dataframes
+diversity_2014 <- inner_join(diversity_2014, cat_2014, by = 
+c("season","year","POSTCODE","LOC_ID","X","Y","LATITUDE","LONGITUDE"))
+diversity_2015 <- inner_join(diversity_2015, cat_2015, by = 
+c("season","year","POSTCODE","LOC_ID","X","Y","LATITUDE","LONGITUDE"))
+
+#Re-add SUB_IDs to diversity dataframes
+diversity_2014 <- inner_join(diversity_2014, SUB_2014, by = 
+c("season","year","POSTCODE","LOC_ID","X","Y","LATITUDE","LONGITUDE","sample_size","GARDEN_SIZE"))
+diversity_2015 <- inner_join(diversity_2015, SUB_2015, by = 
+c("season","year","POSTCODE","LOC_ID","X","Y","LATITUDE","LONGITUDE","sample_size","GARDEN_SIZE"))
+
+#Merge diversity_2014 with food dataframe and filter
+food_2014 <- left_join(diversity_2014, food, by = "SUB_ID")
+food_2014$n <- 1
+food_2014 <- aggregate(n ~ FOOD_NAME + LOC_ID + season + year + GARDEN_SIZE, food_2014, sum)
+food_2014 <- food_2014 %>% pivot_wider(names_from = FOOD_NAME, values_from = n)
+food_2014[is.na(food_2014)] <- 0
+food_2014[,5:18]<- ifelse(food_2014[,5:18]>0, 1, 0)
+food_2014$Food_count <-rowSums(food_2014[,5:18])
+food_2014 <- food_2014[, -c(5:18)]
+
+#Merge diversity_2015 with food dataframe and filter
+food_2015 <- left_join(diversity_2015, food, by = "SUB_ID")
+food_2015$n <- 1
+food_2015 <- aggregate(n ~ FOOD_NAME + LOC_ID + season + year + GARDEN_SIZE, food_2015, sum)
+food_2015 <- food_2015 %>% pivot_wider(names_from = FOOD_NAME, values_from = n)
+food_2015[is.na(food_2015)] <- 0food_2015[,5:18]<- ifelse(food_2015[,5:18]>0, 1, 0)
+food_2015$Food_count <-rowSums(food_2015[,5:18])
+food_2015 <- food_2015[, -c(5:18)]
+
+#Remove SUB_ID from diversity dataframes
+diversity_2014 <- diversity_2014 %>% select(-SUB_ID)
+diversity_2015 <- diversity_2015 %>% select(-SUB_ID)
+
+#Remove duplicated LOC_IDs due to SUB_ID
+diversity_2014<-distinct(diversity_2014,LOC_ID,season,year,GARDEN_SIZE, .keep_all= TRUE)
+diversity_2015<-distinct(diversity_2015,LOC_ID,season,year,GARDEN_SIZE, .keep_all= TRUE)
+
+#Join food count to diversity dataframes
+diversity_2014 <- inner_join(diversity_2014, food_2014, by = c("season","LOC_ID", "year", "GARDEN_SIZE"))
+diversity_2015 <- inner_join(diversity_2015, food_2015, by = c("season","LOC_ID", "year", "GARDEN_SIZE"))
+
+#-----------------------------------------------------------------------------------------------------------------------------
+
+#Abundance & Richness
+
+#remove SUB_IDs from Richness dataframes to manage duplicate data
+richness_2014 <- richness_2014 %>% select(-SUB_ID)
+richness_2015 <- richness_2015 %>% select(-SUB_ID)
+
+#Find the Richness using abundance dataframes
+richness_2014 <- richness_2014 %>% count(LOC_ID, season, year, ENGLISH_NAME)
+richness_2014 <- richness_2014 %>% count(LOC_ID, season, year)
+richness_2015 <- richness_2015 %>% count(LOC_ID, season, year, ENGLISH_NAME)
+richness_2015 <- richness_2015 %>% count(LOC_ID, season, year)
+colnames(richness_2014)[4] <- "Richness"
+colnames(richness_2015)[4] <- "Richness"
+
+#Join richness with diversity dataframes
+diversity_2014 <- inner_join(richness_2014, diversity_2014, by = c("year","LOC_ID","season"))
+diversity_2015 <- inner_join(richness_2015, diversity_2015, by = c("year","LOC_ID","season"))
+
+#take the abundance value per season by rowsums
+abundance_2014$abundance <-rowSums(abundance_2014[,13:97])
+abundance_2014 <- abundance_2014[, -c(13:97)]
+abundance_2015$abundance <-rowSums(abundance_2015[,13:97])
+abundance_2015 <- abundance_2015[, -c(13:97)]
+
+#join abundance to diversity dataframes
+diversity_2014 <- inner_join(diversity_2014, abundance_2014, by = 
+c("diversity","ID","season","year","POSTCODE","LOC_ID","X","Y","LATITUDE","LONGITUDE", "sample_size", 
+"GARDEN_SIZE"))
+diversity_2015 <- inner_join(diversity_2015, abundance_2015, by = 
+c("diversity","ID","season","year","POSTCODE","LOC_ID","X","Y","LATITUDE","LONGITUDE", "sample_size", 
+"GARDEN_SIZE"))#remove unnecessary datasets
+
+rm(SUB_2014, SUB_2015, year_2015, year_2014, method_2014, method_2015, richness_2014, 
+richness_2015, abundance_2014, abundance_2015, Bird_Data, Bird_Counts, bird_filter, habitat_unique, 
+cat_2014, cat_2015, food_2014, food_2015, food, habitat, cats)
+
+#Tidy abundance dataframes
+Abundance_2014 <- Abundance_2014 %>% select(-c(SUB_ID,year_2014, LATITUDE, LONGITUDE, X, Y, 
+POSTCODE, sample_size))
+Abundance_2015 <- Abundance_2015 %>% select(-c(SUB_ID,year_2015, LATITUDE, LONGITUDE, X, Y, 
+POSTCODE, sample_size))
+
+#Pivot from long to wide format the abundance data
+Matrix_2014 <- Abundance_2014 %>% distinct() %>%
+ pivot_wider(names_from = ENGLISH_NAME, values_from = HOW_MANY)
+Matrix_2015 <- Abundance_2015 %>% distinct() %>%
+ pivot_wider(names_from = ENGLISH_NAME, values_from = HOW_MANY)
+Matrix_2014[is.na(Matrix_2014)] <- 0
+Matrix_2015[is.na(Matrix_2015)] <- 0
+
+#Place biodiversity indices and other local variables into the abundance and matrix databases
+Abundance_2014<- right_join(diversity_2014, Abundance_2014, by = c("season","year","LOC_ID", 
+"GARDEN_SIZE"))
+Abundance_2014 <- Abundance_2014 %>% select(-c(LATITUDE, ID, LONGITUDE, X, Y, POSTCODE, 
+sample_size))
+Abundance_2015 <- right_join(diversity_2015, Abundance_2015, by = c("season","year","LOC_ID", 
+"GARDEN_SIZE"))
+Abundance_2015 <- Abundance_2015 %>% select(-c(LATITUDE, ID, LONGITUDE, X, Y, POSTCODE, 
+sample_size))
+Matrix_2014 <- right_join(diversity_2014, Matrix_2014, by = c("season","year","LOC_ID", "GARDEN_SIZE"))
+Matrix_2014 <- Matrix_2014 %>% select(-c(LATITUDE, ID, LONGITUDE, X, Y, POSTCODE, sample_size))
+Matrix_2015 <- right_join(diversity_2015, Matrix_2015, by = c("season","year","LOC_ID", "GARDEN_SIZE"))
+Matrix_2015 <- Matrix_2015 %>% select(-c(LATITUDE, ID, LONGITUDE, X, Y, POSTCODE, sample_size))
+
+#Write csv files
+write.csv(diversity_2014, "diversity_2014.csv")
+write.csv(diversity_2015, "diversity_2015.csv")
+write.csv(Abundance_2014, "abundance_2014.csv")
+write.csv(Abundance_2015, "abundance_2015.csv")
+write.csv(Matrix_2014, "Matrix_2014.csv")
+write.csv(Matrix_2015, "Matrix_2015.csv")
