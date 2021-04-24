@@ -1,0 +1,82 @@
+#4. Final GIS Aggregation
+
+#Represents the final GIS data aggregation into single dataframes per year before data presentation & analysis
+#Includes:
+#Data error removal and correction
+#Conversion of data into percentage data
+#Data management and compliation
+#Writing data to file (i.e. CSV)
+
+#Reading csv files into R environment
+LCM2014 <- read.csv("Landcover_2014.csv")
+LCM2015 <- read.csv("Landcover_2015.csv")
+SHP2014 <- read.csv("Landscape_2014.csv")
+SHP2015 <- read.csv("Landscape_2015.csv")
+NDVI2014<- read.csv("NDVI_2014.csv")
+NDVI2015<- read.csv("NDVI_2015.csv")
+
+#Sort columns
+SHP2014 <- SHP2014[, c(2:11)]
+SHP2015 <- SHP2015[, c(2:11)]
+LCM2014 <- LCM2014[, c(3:18)]
+LCM2015 <- LCM2015[, c(3:18)]
+NDVI2014 <-NDVI2014[,c(10,49)]
+colnames(NDVI2014)[2] <- "Mean NDVI"
+NDVI2015 <-NDVI2015[,c(10,47)]
+colnames(NDVI2015)[2] <- "Mean NDVI"
+
+#Joining shp to lcm
+Landcover_2014 <- merge(LCM2014, SHP2014, by = "LOC_ID")
+Landcover_2015 <- merge(LCM2015, SHP2015, by = "LOC_ID")
+Landcover_2014<- merge(Landcover_2014, NDVI2014, by = "LOC_ID")
+Landcover_2015 <- merge(Landcover_2015, NDVI2015, by = "LOC_ID")#RM
+
+#Fix grassland data 2015
+landcover_2015$Grassland <- as.numeric(landcover_2015$Grassland) / 1000000
+
+#Fix greenspace km2 data 2015
+landcover_2015$Greenspace.Area..km2. <- as.numeric(landcover_2015$Greenspace.Area..km2.) / 1000000
+
+#Processing data
+#combining wetland and sediment
+landcover_2014$wet_sed <- landcover_2014$Wetland + landcover_2014$Sediment
+landcover_2014 <- landcover_2014[, -c(13, 14)]
+landcover_2014 <- landcover_2014 %>% relocate(wet_sed, .before = Urban)
+colnames(landcover_2014)[13] <- "Wetland"
+landcover_2015$wet_sed <- landcover_2015$Wetland + landcover_2015$Sediment
+landcover_2015 <- landcover_2015[, -c(13, 14)]
+landcover_2015 <- landcover_2015 %>% relocate(wet_sed, .before = Urban)
+colnames(landcover_2015)[13] <- "Wetland"
+
+#LCM2015 Proportions
+#Make new column to represent sum of each LCM data layer
+landcover_2014$sum <- rowSums(landcover_2014[, c(9:15)])
+landcover_2015$sum <- rowSums(landcover_2015[, c(9:15)])
+
+#Make each LCM column proportional
+landcover_2014$Broadleaf <- (landcover_2014$Broadleaf/landcover_2014$sum)*100
+landcover_2014$Conifer <- (landcover_2014$Conifer/landcover_2014$sum)*100
+landcover_2014$Arable <- (landcover_2014$Arable/landcover_2014$sum)*100
+landcover_2014$Grassland <- (landcover_2014$Grassland/landcover_2014$sum)*100
+landcover_2014$Wetland <- (landcover_2014$Wetland/landcover_2014$sum)*100
+landcover_2014$Urban <- (landcover_2014$Urban/landcover_2014$sum)*100
+landcover_2014$Suburban <- (landcover_2014$Suburban/landcover_2014$sum)*100
+landcover_2015$Broadleaf <- (landcover_2015$Broadleaf/landcover_2015$sum)*100
+landcover_2015$Conifer <- (landcover_2015$Conifer/landcover_2015$sum)*100
+landcover_2015$Arable <- (landcover_2015$Arable/landcover_2015$sum)*100
+landcover_2015$Grassland <- (landcover_2015$Grassland/landcover_2015$sum)*100
+landcover_2015$Wetland <- (landcover_2015$Wetland/landcover_2015$sum)*100
+landcover_2015$Urban <- (landcover_2015$Urban/landcover_2015$sum)*100
+landcover_2015$Suburban <- (landcover_2015$Suburban/landcover_2015$sum)*100
+
+#Remove 'sum' columns
+landcover_2014 <- subset (landcover_2014, select = -c(26))
+landcover_2015 <- subset (landcover_2015, select = -c(26))
+
+#Test that sum of LCM2015 percentage layers =100
+landcover_2014$sum <- rowSums(landcover_2014[, c(10:16)])
+landcover_2015$sum <- rowSums(landcover_2015[, c(10:16)])
+
+#Write file
+write.csv(Landcover_2014, "Total_Landcover_2014.csv")#writing file
+write.csv(Landcover_2015, "Total_Landcover_2015.csv"
