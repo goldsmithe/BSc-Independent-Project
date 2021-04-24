@@ -1,0 +1,50 @@
+#3. Satellite Data Management
+
+#Represents the simple action of merging two satellite raster files together in preparation for image analysis and NDVI computation in ArcGIS
+
+#Load in raster package
+library(raster)
+
+#Load in norfolk rasters
+bnorfolk <- raster("big_norfolk.tif")
+snorfolk <- raster("little_norfolk.tif")
+
+#Raster A details
+#> bnorfolk
+#class : RasterLayer 
+#dimensions : 10980, 10980, 120560400 (nrow, ncol, ncell)
+#resolution : 10, 10 (x, y)
+#extent : 3e+05, 409800, 5790240, 5900040 (xmin, xmax, ymin, ymax)
+#crs : +proj=utm +zone=31 +datum=WGS84 +units=m +no_defs 
+#source : E:/1.Dissertation/Datasets/big_norfolk.tif 
+#names : big_norfolk 
+#values : -0.8675136, 0.9994924 (min, max)
+
+#Raster B details
+#> snorfolk
+#class : RasterLayer 
+#dimensions : 10980, 10980, 120560400 (nrow, ncol, ncell)
+#resolution : 10, 10 (x, y)
+#extent : 399960, 509760, 5790240, 5900040 (xmin, xmax, ymin, ymax)#crs : +proj=utm +zone=31 +datum=WGS84 +units=m +no_defs 
+#source : E:/1.Dissertation/Datasets/little_norfolk.tif 
+#names : little_norfolk 
+#values : -1, 0.9994152 (min, max)
+
+#Merge the two rasters
+norfolk <-merge(snorfolk, bnorfolk)
+
+#Merged raster details
+#dimensions : 10980, 20976, 230316480 (nrow, ncol, ncell)
+#resolution : 10, 10 (x, y)
+#extent : 3e+05, 509760, 5790240, 5900040 (xmin, xmax, ymin, ymax)
+#crs : +proj=utm +zone=31 +datum=WGS84 +units=m +no_defs 
+#source : C:/Users/Emily/AppData/Local/Temp/RtmpeohaVR/raster/r_tmp_2020-10-
+25_165339_7188_52292.grd 
+#names : layer 
+#values : -1, 0.9994924 (min, max)
+
+#Check merged raster
+plot(norfolk)
+
+#Write merged raster
+writeRaster(norfolk, "norfolk.tif"
