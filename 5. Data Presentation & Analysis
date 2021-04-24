@@ -1,0 +1,925 @@
+#5. Data Presentation & Analysis
+
+#Represents the core of the dissertation project.
+#Includes:
+#Further data compliation - for ease of presentation and analysis & map presentation in ArcGIS Online
+#Data presentation - barplots, bar charts, scatter plots
+#Data analysis - single linear regression, single beta regression, multiple linear regression, multiple beta regression, Minimum Adequate Models (MAMs), ANOVAs, Principle Component Analyses (PCAs)
+
+#Load packages in
+library(e1071) #for statistical tests - tests for skewness 
+library(memisc) #for building linear model tables
+library(lubridate) 
+library(purrr)
+library(ggplot2) #for graph-building
+library(ggpubr)#for graph-building
+library(compositions) #for transforming percentage data
+library(betareg) #for simpsons diversity analysis
+library(imputeR) #for MAMs
+library(FactoMineR) #for PCA
+library(ggbiplot) #for PCA
+
+#load files in
+Diversity_2014 <- read.csv("diversity_2014.csv")
+Diversity_2015 <- read.csv("diversity_2015.csv")
+landcover_2014 <- read.csv("Total_Landcover_2014.csv")
+landcover_2015 <- read.csv("Total_Landcover_2015.csv")
+Matrix_2014 <- read.csv("Matrix_2014.csv")
+Matrix_2015 <- read.csv("Matrix_2015.csv")
+
+#file cleanup and tidy - move all biodiversity indices to the front
+Diversity_2014 <- Diversity_2014[,-c(1,4,7:13)]
+Diversity_2015 <- Diversity_2015[,-c(1,4,7:13)]
+landcover_2014 <- landcover_2014[,-c(1,3:7,23,24)]
+landcover_2015 <- landcover_2015[,-c(1,3:7,23,24)]
+Matrix_2014 <- Matrix_2014[,-c(1)]
+Matrix_2015 <- Matrix_2015[,-c(1)]
+Diversity_2014 <- Diversity_2014 %>% relocate(abundance, .before = GARDEN_SIZE)
+Diversity_2015 <- Diversity_2015 %>% relocate(abundance, .before = GARDEN_SIZE)
+Matrix_2014 <- Matrix_2014 %>% relocate(abundance, .before = GARDEN_SIZE)
+Matrix_2015 <- Matrix_2015 %>% relocate(abundance, .before = GARDEN_SIZE)
+
+#Compile the landcover datasets with biodiversity indices
+Bird_2014 <- inner_join(Diversity_2014,landcover_2014, by = "LOC_ID","GARDEN_SIZE")
+Bird_2015 <- inner_join(Diversity_2015,landcover_2015, by = "LOC_ID","GARDEN_SIZE")
+Bird_2014 <- Bird_2014[, -c(9)]
+Bird_2015 <- Bird_2015[, -c(9)]
+names(Bird_2014)[6]<-"GARDEN_SIZE"
+names(Bird_2015)[6]<-"GARDEN_SIZE"
+rm(Diversity_2014,Diversity_2015,landcover_2014,landcover_2015)
+
+#Preparing data for merging
+#Add column to represent years
+Bird_2014$year <- 2014
+Bird_2014 <- Bird_2014 %>% relocate(year, .before = season)
+Bird_2015$year <- 2015
+Bird_2015 <- Bird_2015 %>% relocate(year, .before = season)
+
+#remove duplicate rows
+Bird_2014 <- Bird_2014[-c(19,21,101,103,109,111,153,155),]
+Bird_2015 <- Bird_2015[-c(18,20,99,101,107,109,148,150),]
+
+#Matrix preparation - have matrix only representative of relevant Bird Loc IDs
+Matrix_2014<-Matrix_2014[Matrix_2014$LOC_ID %in% unique(Bird_2014$LOC_ID), ]
+Matrix_2015<-Matrix_2015[Matrix_2015$LOC_ID %in% unique(Bird_2015$LOC_ID), ]
+
+#remove duplicate rows
+Matrix_2014 <- Matrix_2014 %>% mutate(id = row_number())
+Matrix_2015 <- Matrix_2015 %>% mutate(id = row_number())
+Matrix_2014 <- Matrix_2014 %>% relocate(id, .before = LOC_ID)
+Matrix_2015 <- Matrix_2015 %>% relocate(id, .before = LOC_ID)
+Matrix_2014 <- Matrix_2014[-c(19,21,101,103,109,111,153,155),]
+Matrix_2015<- Matrix_2015[-c(18,20,99,101,107,109,148,150),]
+Matrix_2014<- Matrix_2014[, -c(1)]
+Matrix_2015<- Matrix_2015[, -c(1)]
+Matrix_2014 <- Matrix_2014 %>% relocate(year, .before = season)
+Matrix_2015 <- Matrix_2015 %>% relocate(year, .before = season)
+
+#Join bird and matrix datasets, respectively
+Bird<- full_join(Bird_2014,Bird_2015)
+Matrix<- full_join(Matrix_2014,Matrix_2015)
+rm(Bird_2014, Bird_2015, Matrix_2014,Matrix_2015)
+
+#rm columns
+Bird <- Bird[, -c(21,23)]
+
+write.csv(Bird, "Bird.csv")
+#--------------------------------------------------------------------------
+#Data presentation
+#--------------------------------------------------------------------------
+#Map making
+#make datasets for mapping
+Summer<- Bird[Bird$season %in% 'Summer',] 
+Winter<- Bird[Bird$season %in% 'Winter',] 
+
+#neaten datasets - remove unnecessary data columns
+Summer <- Summer[,c(1:6)]
+Winter <- Winter[,c(1:6)]
+
+#divide into years to support geographic data binding
+Summer_2014<- Summer[Summer$year %in% '2014',] 
+Summer_2015<- Summer[Summer$year %in% '2015',] 
+Winter_2014<- Winter[Winter$year %in% '2014',] 
+Winter_2015<- Winter[Winter$year %in% '2015',] rm(Summer, Winter)
+
+#bind latitude and longitude data
+Diversity_2014 <- read.csv("diversity_2014.csv")
+Diversity_2015 <- read.csv("diversity_2015.csv")
+Winter_2014 <-merge(Winter_2014, Diversity_2014[, c(2, 9:12)])
+Winter_2014 <- Winter_2014 %>% distinct()
+Summer_2014 <-merge(Summer_2014, Diversity_2014[, c(2, 9:12)])
+Summer_2014 <- Summer_2014 %>% distinct()
+Winter_2015 <-merge(Winter_2015, Diversity_2015[, c(2, 9:12)])
+Winter_2015 <- Winter_2015 %>% distinct()
+Summer_2015 <-merge(Summer_2015, Diversity_2015[, c(2, 9:12)])
+Summer_2015 <- Summer_2015 %>% distinct()
+rm(Diversity_2014, Diversity_2015)
+
+#merge seasons back together and neaten columns
+Winter <-rbind(Winter_2014, Winter_2015)
+Summer <-rbind(Summer_2014, Summer_2015)
+rm(Winter_2014, Winter_2015, Summer_2014, Summer_2015)
+
+#relocate geographic data
+Winter <- Winter %>% relocate(,c(7:10), .before = season)
+Summer <- Summer %>% relocate(,c(7:10), .before = season)
+
+#highlight which rows indicate duplicated LOC_IDs for means
+Winter <- Winter %>% 
+ group_by(LOC_ID) %>% 
+ mutate(dupe = n()>1)
+Summer <- Summer %>% 
+ group_by(LOC_ID) %>% 
+ mutate(dupe = n()>1)
+ 
+#Find mean of Richness, Diversity and Abundance between 2014 and 2015 for Summer and Winter, combine and divide by 2 and sum rows by LOC_ID
+#Summer
+FUN <- function(a){sum(a)/2}
+Summer_Richness <- aggregate(Richness ~ LOC_ID+dupe, Summer[Summer$dupe == "TRUE",], FUN)
+Summer_Diversity <- aggregate(diversity ~ LOC_ID+dupe, Summer[Summer$dupe == "TRUE",], FUN)
+Summer_Abundance <- aggregate(abundance ~ LOC_ID+dupe, Summer[Summer$dupe == "TRUE",], FUN)
+#merge means into new dataframe
+Summer_merge<-merge(Summer_Richness, Summer_Diversity)
+Summer_merge <-merge(Summer_merge,Summer_Abundance)
+
+#Bind together 
+Summer_false <- Summer[Summer$dupe == "FALSE",c(1,11, 8, 9, 10)]
+Mean_Summer <- rbind(Summer_false, Summer_merge)
+Summer <- inner_join(Mean_Summer, unique(Summer[, c(1, 3, 4, 5, 6)]), by="LOC_ID")
+
+#Winter
+FUN <- function(a){sum(a)/2}
+Winter_Richness <- aggregate(Richness ~ LOC_ID+dupe, Winter[Winter$dupe == "TRUE",], FUN)
+Winter_Diversity <- aggregate(diversity ~ LOC_ID+dupe, Winter[Winter$dupe == "TRUE",], FUN)Winter_Abundance <- aggregate(abundance ~ LOC_ID+dupe, Winter[Winter$dupe == "TRUE",], FUN)
+
+#merge means into new dataframe
+Winter_merge<-merge(Winter_Richness, Winter_Diversity)
+Winter_merge <-merge(Winter_merge,Winter_Abundance)
+
+#Bind together 
+Winter_false <- Winter[Winter$dupe == "FALSE",c(1,11, 8, 9, 10)]
+Mean_Winter <- rbind(Winter_false, Winter_merge)
+Winter <- inner_join(Mean_Winter, unique(Winter[, c(1, 3, 4, 5, 6)]), by="LOC_ID")
+
+#tidy datasets
+Summer <- Summer[,-c(2)]
+Winter <- Winter[,-c(2)]
+Winter <- Winter %>% relocate(,c(5:8), .before = Richness)
+Summer <- Summer %>% relocate(,c(5:8), .before = Richness)
+
+#print datasets for use in Arcmap and ArcGIS Online
+write.csv(Summer, "Summer.csv")
+write.csv(Winter, "Winter.csv")
+rm(Summer_Richness, Summer_false, Summer_Diversity, Summer_Abundance, Summer_merge, Mean_Summer)
+rm(Winter_Richness,Winter_false, Winter_Diversity, Winter_Abundance, Winter_merge, Mean_Winter)
+
+#---------------------------------------------------------------------------------------------------------------
+#Boxplots to demonstrate local variable trends - GARDEN SIZE, cat_presence and food
+par(mfrow=c(2, 3)) #put 4 boxplots onto a 2x2 grid
+boxplot(Bird$`diversity` ~ Bird$GARDEN_SIZE, xlab = "Garden Size", ylab = "Diversity", main='Garden Size 
+and Diversity', col = c("Green","Red","Blue"))
+boxplot(Bird$`diversity` ~ Bird$cat_presence,xlab = "Cat presence", ylab = "Diversity", main='Cat presence 
+and Diversity',col = c("Green","Red"))
+boxplot(Bird$`diversity` ~ Bird$Food_count,xlab = "Food types", ylab = "Diversity",main='Food types and 
+Diversity',col=(c('darkgoldenrod1','darkslategray')))
+boxplot(Bird$`diversity` ~ Bird$season,xlab = "Seasons", ylab = "Diversity", main='Seasonality and 
+Diversity',col = c("Red","Blue"))
+boxplot(Bird$`diversity` ~ Bird$Site,xlab = "Site", ylab = "Diversity", main='Sites and Diversity',col = 
+c("Green","Red","Blue"))
+boxplot(Bird$`diversity` ~ Bird$year,xlab = "Year", ylab = "Diversity", main='Year and Diversity',col = 
+c("Green","Red","Blue"))
+par(mfrow=c(2, 3)) #put 4 boxplots onto a 2x2 grid
+boxplot(Bird$`abundance` ~ Bird$GARDEN_SIZE, xlab = "Garden Size", ylab = "Abundance", main='Garden 
+Size and Abundance',col = c("Green","Red","Blue"))
+boxplot(Bird$`abundance` ~ Bird$cat_presence,xlab = "Cat presence", ylab = "Abundance", main='Cat 
+presence and Abundance', col = c("Green","Red"))
+boxplot(Bird$`abundance` ~ Bird$Food_count,xlab = "Food types", ylab = "Abundance",main='Food types 
+and Abundance', col=(c('darkgoldenrod1','darkslategray')))
+boxplot(Bird$`abundance` ~ Bird$season,xlab = "Seasons", ylab = "Abundance", main='Seasonality and 
+Abundance', col = c("Red","Blue"))
+boxplot(Bird$`abundance` ~ Bird$Site,xlab = "Site", ylab = "Abundance", main='Sites and Abundance',col = 
+c("Green","Red","Blue"))
+boxplot(Bird$`abundance` ~ Bird$year,xlab = "Year", ylab = "Abundance", main='Year and Abundance',col = 
+c("Green","Red","Blue"))
+par(mfrow=c(2, 3)) #put 4 boxplots onto a 2x2 gridboxplot(Bird$`Richness` ~ Bird$GARDEN_SIZE, xlab = "Garden Size", ylab = "Richness", main='Garden Size 
+and Richness', col = c("Green","Red","Blue"))
+boxplot(Bird$`Richness` ~ Bird$cat_presence,xlab = "Cat presence", ylab = "Richness",main='Cat presence 
+and Richness', col = c("Green","Red"))
+boxplot(Bird$`Richness` ~ Bird$Food_count,xlab = "Food types", ylab = "Richness",main='Food types and 
+Richness', col=(c('darkgoldenrod1','darkslategray')))
+boxplot(Bird$`Richness` ~ Bird$season,xlab = "Seasons", ylab = "Richness", main='Seasonality and Richness', 
+col = c("Red","Blue"))
+boxplot(Bird$`Richness` ~ Bird$Site,xlab = "Site", ylab = "Richness", main='Sites and Richness',col = 
+c("Green","Red","Blue"))
+boxplot(Bird$`Richness` ~ Bird$year,xlab = "Year", ylab = "Richness", main='Year and Richness',col = 
+c("Green","Red","Blue"))
+
+#---------------------------------------------------
+#LCM plots
+#LCM distributions - extent of landcover within buffer zones
+graphics.off()
+LCM.box <- Bird[, 11:17]
+LCM.box <- box.test %>% pivot_longer(-c())
+boxplot(data=LCM.box, value~name, xlab = "Landcover type", ylab = "Area of buffer zone (%)", 
+col=(c('darkgoldenrod1','darkslategray')))
+#Facet Wrap LCM
+LCM<- Bird[,c(4:6, 11:17)]
+
+#Remove duplicated LOC_IDs
+LCM$LOC_ID <- duplicated(Bird$LOC_ID)
+LCM <- LCM[LCM$LOC_ID %in% 'FALSE',] 
+LCM <- LCM[,-c(1)]
+
+#Pivot into long format
+LCM <- LCM %>% pivot_longer(-c(1:3)) #Pivot dataframe
+
+#create interval range
+myIntervals <- c("0 - 0.1", "0.2 - 0.3 ", "0.3 - 0.4 ", "0.4 - 0.5 ","0.5 - 0.6 ","0.6 - 0.7 ","0.7 - 0.8 ","0.8 -
+0.9","0.9 - 1" )
+LCM$value_range<- myIntervals[findInterval(LCM$value, c(0, 0.1 , 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1))]
+
+#make dataframes
+Diversity <-test %>% count(name, value_range, diversity) %>% group_by(name)
+Richness <-test %>% count(name, value_range, Richness) %>% group_by(name)
+Abundance <-test %>% count(name, value_range, abundance) %>% group_by(name)
+
+#Build Graphs
+#Diversity
+ggplot(test, aes(x=value_range, y=diversity, group=name, label=round(diversity, 1))) + 
+ geom_bar(aes(fill=name), stat='identity') +
+ scale_colour_manual(values=c("Saddlebrown","red4","darkgreen", 
+"limegreen","gray","black","mediumblue")) +
+ scale_fill_manual(values=c("Saddlebrown","red4","darkgreen", 
+"limegreen","gray","black","mediumblue"))+
+ ylab("Simpson's Diversity") +
+ xlab("Buffer Landcover (%)") +
+ facet_wrap(~name, scales="free") +
+ theme_classic() +
+ ylim(c(0, 1)) +
+ theme(
+ axis.title.x=element_text(face="bold", size=13, family="TT Times New Roman"),
+ axis.title.y=element_text(face="bold", size=13, family="TT Times New Roman"),
+ axis.text.x=element_text(face="bold", size =10, family="TT Times New Roman", angle=90), 
+ axis.text.y=element_text(face="bold", size =10, family="TT Times New Roman"),
+ legend.title=element_blank(),
+ legend.text=element_text(color="black", size =10, face="bold", family="TT Times New Roman"),
+ legend.justification=c(1.2,1),
+ plot.title=element_text(face="bold", size = 18, hjust=0.5, colour = "black"),
+ axis.line=element_blank(),
+ legend.key.height=unit(.1, "cm")
+ )
+ 
+#Richness
+ggplot(Richness, aes(x=value_range, y=Richness, group=name, label=round(Richness, 1))) + 
+ geom_bar(aes(fill=name), stat='identity') +
+ scale_colour_manual(values=c("Saddlebrown","red4","darkgreen", 
+"limegreen","gray","black","mediumblue")) +
+ scale_fill_manual(values=c("Saddlebrown","red4","darkgreen", 
+"limegreen","gray","black","mediumblue"))+
+ ylab("Species Richness") +
+ xlab("Buffer Landcover (%)") +
+ facet_wrap(~name, scales="free") +
+ theme_classic() +
+ ylim(c(0, 50)) +
+ theme(
+ axis.title.x=element_text(face="bold", size=13, family="TT Times New Roman"),
+ axis.title.y=element_text(face="bold", size=13, family="TT Times New Roman"),
+ axis.text.x=element_text(face="bold", size =10, family="TT Times New Roman", angle=90), 
+ axis.text.y=element_text(face="bold", size =10, family="TT Times New Roman"),
+ legend.title=element_blank(),
+ legend.text=element_text(color="black", size =10, face="bold", family="TT Times New Roman"),
+ legend.justification=c(1.2,1),
+ plot.title=element_text(face="bold", size = 18, hjust=0.5, colour = "black"),
+ axis.line=element_blank(),
+ legend.key.height=unit(.1, "cm")
+ )
+ 
+#Abundance
+ggplot(Abundance, aes(x=value_range, y=abundance, group=name, label=round(abundance, 1))) + 
+ geom_bar(aes(fill=name), stat='identity') +
+ scale_colour_manual(values=c("Saddlebrown","red4","darkgreen", 
+"limegreen","gray","black","mediumblue")) +
+ scale_fill_manual(values=c("Saddlebrown","red4","darkgreen", 
+"limegreen","gray","black","mediumblue"))+
+ ylab("Species Abundance") +
+ xlab("Buffer landcover (%)") +
+ facet_wrap(~name, scales="free") +
+ theme_classic() +
+ ylim(c(0, 200)) +
+ theme(
+ axis.title.x=element_text(face="bold", size=13, family="TT Times New Roman"),
+ axis.title.y=element_text(face="bold", size=13, family="TT Times New Roman"),
+ axis.text.x=element_text(face="bold", size =10, family="TT Times New Roman", angle=90), 
+ axis.text.y=element_text(face="bold", size =10, family="TT Times New Roman"),
+ legend.title=element_blank(),
+ legend.text=element_text(color="black", size =10, face="bold", family="TT Times New Roman"),
+ legend.justification=c(1.2,1),
+ plot.title=element_text(face="bold", size = 18, hjust=0.5, colour = "black"),
+ axis.line=element_blank(),
+ legend.key.height=unit(.1, "cm")
+ )
+ 
+rm(Diversity, Richness, Abundance, myIntervals)
+
+#Urban indices scatterplots
+#Diversity
+par(mfrow=c(2, 3))
+plot(Bird$Motor.Path.Length..km., Bird$diversity, pch=16, cex=0.75, xlab = "Motorway Extent (km)", ylab = 
+"Diversity")
+abline(lm(diversity ~ Motor.Path.Length..km., data=Bird), col="Red")
+plot(Bird$Pedestrian.Path.Length..km., Bird$diversity, pch=16, cex=0.75,xlab="Pedestrian Extent (km)", ylab 
+= "Diversity")
+abline(lm(diversity ~ Pedestrian.Path.Length..km., data=Bird), col="Red")
+plot(Bird$Greenspace.Area..km2., Bird$diversity, pch=16, cex=0.75, xlab="Greenspace Area (km?)", ylab = 
+"Diversity")
+abline(lm(diversity ~ Greenspace.Area..km2., data=Bird), col="Red")
+plot(Bird$Building.Area..km2., Bird$diversity, pch=16, cex=0.75, xlab="Building Area (km?)", ylab = 
+"Diversity")
+abline(lm(diversity ~ Building.Area..km2., data=Bird), col="Red")
+plot(Bird$River.Length..km., Bird$diversity, pch=16, cex=0.75, xlab= "River Extent (km)", ylab = "Diversity")
+abline(lm(diversity ~ River.Length..km., data=Bird), col="Red")
+plot(Bird$Mean.NDVI, Bird$diversity, pch=16, cex=0.75, xlab="Mean NDVI", ylab = "Diversity")
+abline(lm(diversity ~ Mean.NDVI, data=Bird), col="Red")
+
+#Equations and R^2 labels
+fit <- lm(diversity ~ Motor.Path.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Diversity = ", cf[1], ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-6.50, padj = -27.2)
+fit <- lm(diversity ~ Pedestrian.Path.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Diversity = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-2.6, padj = -27.2)
+fit <- lm(diversity ~ Greenspace.Area..km2., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Diversity = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=0.5, padj = -27.2)
+fit <- lm(diversity ~ Building.Area..km2., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Diversity = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-6)
+fit <- lm(diversity ~ River.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Diversity = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-3.25)
+fit <- lm(diversity ~ Mean.NDVI, data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Diversity = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=0.5)
+
+#Richness
+par(mfrow=c(2, 3))
+plot(Bird$Motor.Path.Length..km., Bird$Richness, pch=16, cex=0.75,xlab = "Motorway Extent (km)", ylab = 
+"Richness")
+abline(lm(Richness ~ Motor.Path.Length..km., data=Bird), col="Red")
+plot(Bird$Pedestrian.Path.Length..km., Bird$Richness, pch=16, cex=0.75,xlab="Pedestrian Extent (km)", ylab 
+= "Richness")
+abline(lm(Richness ~ Pedestrian.Path.Length..km., data=Bird), col="Red")
+plot(Bird$Greenspace.Area..km2., Bird$Richness, pch=16, cex=0.75, xlab="Greenspace Area (km?)", ylab = 
+"Richness")
+abline(lm(Richness ~ Greenspace.Area..km2., data=Bird), col="Red")
+plot(Bird$Building.Area..km2., Bird$Richness, pch=16, cex=0.75, xlab="Building Area (km?)", ylab = 
+"Richness")
+abline(lm(Richness ~ Building.Area..km2., data=Bird), col="Red")
+plot(Bird$River.Length..km., Bird$Richness, pch=16, cex=0.75, xlab= "River Extent (km)", ylab = "Richness")
+abline(lm(Richness ~ River.Length..km., data=Bird), col="Red")
+plot(Bird$Mean.NDVI, Bird$Richness, pch=16, cex=0.75, xlab="Mean NDVI", ylab = "Richness")
+abline(lm(Richness ~ Mean.NDVI, data=Bird), col="Red")
+
+#Equations and R^2 labels
+fit <- lm(Richness ~ Motor.Path.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Richness = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-6.75, padj = -27.2)
+fit <- lm(Richness ~ Pedestrian.Path.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Richness = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-3.5, padj = -27.2)
+fit <- lm(Richness ~ Greenspace.Area..km2., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Richness = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=0.5, padj = -27.2)
+fit <- lm(Richness ~ Building.Area..km2., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Richness = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-8)
+fit <- lm(Richness ~ River.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Richness = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-2.85)
+fit <- lm(Richness ~ Mean.NDVI, data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Richness = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=0.5)
+
+#Abundance
+par(mfrow=c(2, 3))
+plot(Bird$Motor.Path.Length..km., Bird$abundance, pch=16, cex=0.75, xlab = "Motorway Extent (km)", ylab 
+= "Abundance")
+abline(lm(abundance ~ Motor.Path.Length..km., data=Bird), col="Red")
+plot(Bird$Pedestrian.Path.Length..km., Bird$abundance, pch=16, cex=0.75, xlab="Pedestrian Extent (km)", 
+ylab = "Abundance")
+abline(lm(abundance ~ Pedestrian.Path.Length..km., data=Bird), col="Red")
+plot(Bird$Greenspace.Area..km2., Bird$abundance, pch=16, cex=0.75, xlab="Greenspace Area (km?)", ylab = 
+"Abundance")
+abline(lm(abundance ~ Greenspace.Area..km2., data=Bird), col="Red")plot(Bird$Building.Area..km2., Bird$abundance, pch=16, cex=0.75,xlab="Building Area (km?)", ylab = 
+"Abundance")
+abline(lm(abundance ~ Building.Area..km2., data=Bird), col="Red")
+plot(Bird$River.Length..km., Bird$abundance, pch=16, cex=0.75, xlab= "River Extent (km)", ylab = 
+"Abundance")
+abline(lm(abundance ~ River.Length..km., data=Bird), col="Red")
+plot(Bird$Mean.NDVI, Bird$abundance, pch=16, cex=0.75, xlab="Mean NDVI", ylab = "Abundance")
+abline(lm(abundance ~ Mean.NDVI, data=Bird), col="Red")
+
+#Equations and R^2 labels
+fit <- lm(abundance ~ Motor.Path.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Abundance = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-8.5, padj = -27.2)
+fit <- lm(abundance ~ Pedestrian.Path.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Abundance = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-4, padj = -27.2)
+fit <- lm(abundance ~ Greenspace.Area..km2., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Abundance = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=0.5, padj = -27.2)
+fit <- lm(abundance ~ Building.Area..km2., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Abundance = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-8.5)
+fit <- lm(abundance ~ River.Length..km., data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Abundance = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=-3.75)
+fit <- lm(abundance ~ Mean.NDVI, data=Bird)
+cf <- round(coef(fit), 3)
+sum.fit <- round(summary(fit)$r.squared, 3)
+eq <- paste0("Abundance = ", cf[1],
+ ifelse(sign(cf[2])==1, " + ", " - "), abs(cf[2]),".", "R? = ", sum.fit)
+mtext(eq, adj=0.5)
+#bird species boxplot
+#Find a visual representation of the bird frequency - how many wood pigeons?
+graphics.off()
+Bird.box <- (Matrix[, 10:94])Bird.box <- Bird.box %>% pivot_longer(-c())
+ggplot(Bird.box)+geom_bar(aes(reorder(name, -value),y=value), stat='identity') + 
+ scale_x_discrete(breaks=Bird.box$name) +
+ theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +xlab("Bird Species") +ylab("Count")
+
+rm(Bird.box)
+
+#----------------------------------------------------------------
+#Transformations for data analysis
+#----------------------------------------------------------------
+
+#This is to ensure the data are normally distributed, the groups that are being compared have similar 
+variance and that the data are independent
+#Transformations tested: #Log - log(df$x), #log +1 - log1p(df$x), #square root - sqrt(df$x), #cube root -
+df$x^(1/3) 
+#if <-1 or >1 then distribution is highly skewed #if between -1 and -0.5 or 1 and 0.5, there is moderate 
+skewedness # if between -0.5 and 0.5, there is assymetry
+
+#Asymmetrical - NO TRANSFORMATION REQUIRED
+skewness(Bird$Richness) #0.3635681, ASYMMETRY
+skewness(Bird$Food_count) #0.00191632, ASYMMETRY
+skewness(Bird$Mean.NDVI) #-0.7204627, ASYMMETRY
+skewness(Bird$cat_presence) #0.2254278
+
+#Transforming percentage data
+#CLR
+Bird$Broadleaf <- (clr(Bird$Broadleaf))
+Bird$Conifer <- (clr(Bird$Conifer))
+Bird$Urban<- (clr(Bird$Urban))
+Bird$Suburban<- (clr(Bird$Suburban))
+#Bird$Arable <- clr(Bird$Arable)
+Bird$Arable <- Bird$Arable/100
+Bird$Grassland <- clr(Bird$Grassland)
+Bird$Wetland <- (clr(Bird$Wetland))
+
+#Normal transformations
+Bird$abundance <- log1p(Bird$abundance) #abundance to log+1 from 1.414731 to -0.3625867
+Bird$River.Length..km. <- (log1p(Bird$River.Length..km.)) #RIVER LENGTH to log+1, from 1.263188 to 
+0.5357937
+Bird$Greenspace.Area..km2. <- (Bird$Greenspace.Area..km2.^(1/3)) #GREENSPACE AREA to cube root, from 
+1.517474 to 0.3179453
+Bird$Building.Area..km2. <- (Bird$Building.Area..km2.^(1/3)) #BUILDING AREA to cube root, from 1.863619 
+to 0.7757168
+Bird$Pedestrian.Path.Length..km. <- (log1p(Bird$Pedestrian.Path.Length..km.)) #PEDESTRIAN PATHS to 
+LOG+1, 2.056363 to 0.5575205
+Bird$Motor.Path.Length..km. <- (log1p(Bird$Motor.Path.Length..km.)) #MOTOR PATHS to LOG+1 1.56211 to 
+0.5969434
+
+#Writing dataset with newly transformed data
+write.csv(Bird, "Transformed.csv")
+
+#--------------------------------------------------------------------------
+#Statistical analysis
+#--------------------------------------------------------------------------
+#New notation for Subsurban sites to minimise confusion with 'small gardens'
+Bird$Site <- ifelse(Bird$Site == "S", "SS", Bird$Site)
+
+#Single linear regression
+#Diversity
+Year <- betareg(diversity ~ year, Bird) 
+Winter <- betareg(diversity ~ season =="Winter", Bird) 
+Summer <- betareg(diversity ~ season =="Summer", Bird) 
+Site_S <-betareg(diversity ~ Site =="SS", Bird) 
+Site_U <-betareg(diversity ~ Site =="U", Bird) 
+Site_R <-betareg(diversity ~ Site =="R", Bird) 
+Garden_Size_S<-betareg(diversity ~ GARDEN_SIZE =="S", Bird) 
+Garden_Size_M<-betareg(diversity ~ GARDEN_SIZE=="M", Bird) 
+Garden_Size_L<-betareg(diversity ~ GARDEN_SIZE=="L", Bird) 
+Cat_presence <-betareg(diversity ~ cat_presence, Bird) 
+Food_count <-betareg(diversity ~ Food_count, Bird) 
+Broadleaf<-betareg(diversity ~ Broadleaf, Bird) 
+Conifer<-betareg(diversity ~ Conifer, Bird) 
+Grassland <-betareg(diversity ~ Grassland, Bird) 
+Arable<-betareg(diversity ~ Arable, Bird) 
+Wetland<-betareg(diversity ~ Wetland, Bird) 
+Urban<-betareg(diversity ~ Urban, Bird) 
+Suburban<-betareg(diversity ~ Suburban, Bird) 
+Motor_paths<-betareg(diversity ~ Motor.Path.Length..km., Bird)
+Pedestrian_paths<-betareg(diversity ~ Pedestrian.Path.Length..km., Bird) 
+Building_Area<-betareg(diversity ~ Building.Area..km2., Bird) 
+Greenspace_Area<-betareg(diversity ~ Greenspace.Area..km2., Bird) 
+River_Length<-betareg(diversity ~ River.Length..km., Bird)
+Mean_NDVI<-betareg(diversity ~ Mean.NDVI, Bird) 
+
+#Write table
+Single_Div <- mtable(Year, Winter, Summer, Site_R, Site_S, Site_U, Garden_Size_S, Garden_Size_M, 
+Garden_Size_L, Cat_presence, Food_count, Broadleaf, Conifer, Grassland, Arable, Wetland, Suburban, 
+Urban, Motor_paths, Pedestrian_paths, River_Length,Building_Area , 
+Greenspace_Area,Mean_NDVI,summary.stats=c("pseudo.r.squared","phi","p","N"))
+write.mtable(Single_Div)
+file <- "Single_Div.txt"
+write.mtable(Single_Div, file = file)
+
+#Richness
+Year <- lm(Richness ~ year, Bird) 
+Winter <- lm(Richness ~ season =="Winter", Bird) 
+Summer <- lm(Richness ~ season =="Summer", Bird) 
+Site_S <-lm(Richness ~ Site =="SS", Bird) 
+Site_U <-lm(Richness ~ Site =="U", Bird) 
+Site_R <-lm(Richness ~ Site =="R", Bird) 
+Garden_Size_S<-lm(Richness ~ GARDEN_SIZE =="S", Bird) 
+Garden_Size_M<-lm(Richness ~ GARDEN_SIZE=="M", Bird) 
+Garden_Size_L<-lm(Richness ~ GARDEN_SIZE=="L", Bird) 
+Cat_presence <-lm(Richness ~ cat_presence, Bird) 
+Food_count <-lm(Richness ~ Food_count, Bird) Broadleaf<-lm(Richness ~ Broadleaf, Bird) 
+Conifer<-lm(Richness ~ Conifer, Bird) 
+Grassland <-lm(Richness ~ Grassland, Bird) 
+Arable<-lm(Richness ~ Arable, Bird) 
+Wetland<-lm(Richness ~ Wetland, Bird) 
+Urban<-lm(Richness ~ Urban, Bird) 
+Suburban<-lm(Richness ~ Suburban, Bird) 
+Motor_paths<-lm(Richness ~ Motor.Path.Length..km., Bird)
+Pedestrian_paths<-lm(Richness ~ Pedestrian.Path.Length..km., Bird) 
+Building_Area<-lm(Richness ~ Building.Area..km2., Bird)
+Greenspace_Area<-lm(Richness ~ Greenspace.Area..km2., Bird) 
+River_Length<-lm(Richness ~ River.Length..km., Bird)
+Mean_NDVI<-lm(Richness ~ Mean.NDVI, Bird) 
+
+#Write table
+Single_Rich <- mtable(Year,Winter, Summer, Site_R, Site_S, Site_U, Garden_Size_S, Garden_Size_M, 
+Garden_Size_L, Cat_presence, Food_count, Broadleaf, Conifer, Grassland, Arable, Wetland, Suburban, 
+Urban, Motor_paths, Pedestrian_paths, River_Length,Building_Area , 
+Greenspace_Area,Mean_NDVI,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Single_Rich)
+file <- "Single_Rich.new.txt"
+write.mtable(Single_Rich, file = file)
+
+#Abundance
+Year <- lm(abundance ~ year, Bird) 
+Winter <- lm(abundance ~ season =="Winter", Bird) 
+Summer <- lm(abundance ~ season =="Summer", Bird) 
+Site_S <-lm(abundance ~ Site =="SS", Bird) 
+Site_U <-lm(abundance ~ Site =="U", Bird) 
+Site_R <-lm(abundance ~ Site =="R", Bird) 
+summary(lm(abundance ~ GARDEN_SIZE, Bird)) 
+Garden_Size_S<-lm(abundance ~ GARDEN_SIZE =="S", Bird) 
+Garden_Size_M<-lm(abundance ~ GARDEN_SIZE=="M", Bird) 
+Garden_Size_L<-lm(abundance ~ GARDEN_SIZE=="L", Bird) 
+Cat_presence <-lm(abundance ~ cat_presence, Bird) 
+Food_count <-lm(abundance ~ Food_count, Bird) 
+Broadleaf<-lm(abundance ~ Broadleaf, Bird) 
+Conifer<-lm(abundance ~ Conifer, Bird) 
+Grassland <-lm(abundance ~ Grassland, Bird) 
+Arable<-lm(abundance ~ Arable, Bird) 
+Wetland<-lm(abundance ~ Wetland, Bird) 
+Urban<-lm(abundance ~ Urban, Bird) 
+Suburban<-lm(abundance ~ Suburban, Bird) 
+Motor_paths<-lm(abundance ~ Motor.Path.Length..km., Bird)
+Pedestrian_paths<-lm(abundance ~ Pedestrian.Path.Length..km., Bird) 
+Building_Area<-lm(abundance ~ Building.Area..km2., Bird) 
+Greenspace_Area<-lm(abundance ~ Greenspace.Area..km2., Bird) 
+River_Length<-lm(abundance ~ River.Length..km., Bird)
+Mean_NDVI<-lm(abundance ~ Mean.NDVI, Bird)
+
+#Write table
+Single_Abun <- mtable(Year, Winter, Summer, Site_R, Site_S, Site_U, Garden_Size_S, Garden_Size_M, 
+Garden_Size_L, Cat_presence, Food_count, Broadleaf, Conifer, Grassland, Arable, Wetland, Suburban, Urban, Motor_paths, Pedestrian_paths, River_Length,Building_Area , 
+Greenspace_Area,Mean_NDVI,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Single_Abun)
+file <- "Single_Abun.new.txt"
+write.mtable(Single_Abun, file = file)
+
+#Remove single regression components
+rm(Single_Div, Single_Abun, Single_Rich, Arable, Broadleaf, Building_Area, Cat_presence, Conifer, 
+Food_count, Garden_Size_L, Garden_Size_M, Garden_Size_S, Grassland, Greenspace_Area, Mean_NDVI, 
+Motor_paths, River_Length, Pedestrian_paths, Site_R, Site_S, Site_U, Suburban, Summer, Urban, Wetland, Winter, Year)
+
+#-------------------------------------------------------------------------------------------------------------------------------------------
+
+#Multiple linear regression 
+
+#Accounting for colinearity - cor = >=0.7 - colinear
+#Paths, building, greenspace and suburban variables colinear with one another
+cor.test(Bird$Pedestrian.Path.Length..km., Bird$Motor.Path.Length..km., method = "pearson") #paths=  0.8962564 , COLINEARITY #buildings
+cor.test(Bird$Building.Area..km2., Bird$Motor.Path.Length..km., method = "pearson") #Building area/motor path lengths = 0.9413801, COLINEARITY
+cor.test(Bird$Building.Area..km2., Bird$Pedestrian.Path.Length..km., method = "pearson") #building area and pedestrian path lengths = 0.8815263 , COLINEARITY
+#greenspace - no colinearity with any other variable
+#ndvi - no colinearwity with any other variable
+#river - no colinearity with any other variable
+#urban - no colinearity with any other variable
+#suburban - no colinearity for any other LCM column
+cor.test(Bird$Suburban, Bird$Motor.Path.Length..km., method = "pearson") #Suburban and motor path lengths, correlation = 0.8991432 , COLINEARITY
+cor.test(Bird$Suburban, Bird$Pedestrian.Path.Length..km., method = "pearson") #Suburban and pedestrian path lengths = 0.8468133 , COLINEARITY
+cor.test(Bird$Suburban, Bird$Building.Area..km2., method = "pearson") #Suburban and building area = 0.9469583 , COLINEARITY
+cor.test(Bird$Urban, Bird$Building.Area..km2., method = "pearson") #Suburban and building area = 0.9469583 , COLINEARITY
+
+#-------------------------------------------------------------------------------------------------------------------------------------------
+#Separate models to prevent introducing colinear variables into the same models
+#Model A - local variable-based multiple regression - are local variables enough to explain bird diversity? 
+#Model B - LCM landcover-only variable-based multiple regression - are LCM variables enough to explain bird diversity? 
+#model C - Motor-based multiple regression - are these urban vector variables + selected LCM variables  enough to explain bird diversity? 
+#Model D - Pedestrian-based multiple regression - are these urban vector variables enough to explain bird diversity?
+#Model E - buildings - are these urban vector variables enough to explain bird diversity?
+
+#-------------------------------------------------------------------------------------------------------------------------------------------
+#Model A - local variable-based multiple regression
+Richness <- lm(Richness ~ year +season + cat_presence + Food_count + GARDEN_SIZE+ Site, data=Bird) #variables
+Diversity <- betareg(diversity ~ year +season + cat_presence + Food_count + GARDEN_SIZE+ Site , data=Bird) # variables
+Abundance <- lm(abundance ~ year +season + cat_presence + Food_count + GARDEN_SIZE+ Site, data=Bird) # variables
+summary(Richness) # Urban and suburban sites, food count and garden sizes s and m, multiple R2 = 0.3635, P = < 2.2e-16
+summary(Diversity) # Urban sites and garden sizes s and m
+summary(Abundance) # Urban sites, garden sizes s and m and food count
+Model_A <- mtable(Diversity, Richness, Abundance,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Model_A)
+file <- "Model_A.txt"
+write.mtable(Model_A, file = file)
+
+#Model A- MAM moels
+Model_A <- Bird[, c(2, 3, 4, 5, 6, 7, 8, 9, 10)]
+Richness_MAM <- stepforR(Model_A$Richness, Model_A[, -c(3:5)], alpha = 0.2)
+Diversity_MAM <- betareg(diversity ~ GARDEN_SIZE+ Site , data=Bird) # variables
+Abundance_MAM <- stepforR(Model_A$abundance, Model_A[, -c(3:5)], alpha = 0.2)
+summary(Richness_MAM) #Garden size (L, M), Site (Suburban, Rural) and Food count
+summary(Diversity_MAM) #Garden Size (L, M), Site (Suburban, Rural)
+summary(Abundance_MAM) #Garden size (L, Medium) and Food count,)
+Model_A_MAM <- mtable(Richness_MAM, Diversity_MAM, Abundance_MAM, summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Model_A_MAM)
+file <- "Model_A_MAM.txt"
+write.mtable(Model_A_MAM, file = file)
+rm(Abundance, Richness, Diversity, Richness_MAM, Diversity_MAM, Abundance_MAM, Model_A_MAM, Model_A)
+
+#Model B - LCM landcover variable-based multiple regression
+Richness <- lm(Richness ~ Broadleaf + Conifer + Arable + Grassland + Wetland + Urban + Suburban, data=Bird) #landcover variables
+Diversity <- betareg(diversity ~ Broadleaf + Conifer + Arable + Grassland + Wetland + Urban + Suburban, data=Bird) #landcover variables
+Abundance <- lm(abundance ~ Broadleaf + Conifer + Arable + Grassland + Wetland + Urban + Suburban, data=Bird) #landcover variables
+summary(Richness) #suburban
+summary(Diversity) #only marginal sig = Conifer, Urban
+summary(Abundance) #arable, grassland, marginal sig = urban 
+Model_B <- mtable(Diversity, Richness, Abundance,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Model_B)
+file <- "Model_B.txt"
+write.mtable(Model_B, file = file)
+
+#Model B - MAM models 
+Model_B <- Bird[, c(4,5,6,11:17)]
+Richness_MAM<-stepforR(Model_B$Richness,Model_B[, -c(1:3)], alpha = 0.2 )
+Abundance_MAM<-stepforR(Model_B$abundance, Model_B[, -c(1:3,9)], alpha = 0.2 )Diversity_MAM <- betareg(diversity ~ Broadleaf, data=Bird) #landcover variables
+summary(Richness_MAM) #suburban only
+summary(Diversity_MAM) #conifer only
+summary(Abundance_MAM) #grassland, arable, marginal sig = suburban, wetland
+Model_B_MAM <- mtable(Richness_MAM, Abundance_MAM,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Model_B_MAM)
+file <- "Model_B_MAM.txt"
+write.mtable(Model_B_MAM, file = file)
+rm(Abundance, Richness, Diversity, Richness_MAM, Diversity_MAM, Abundance_MAM, Model_B_MAM, 
+Model_B)
+
+#model C - Motor-based multiple regression
+Richness <- lm(Richness ~ Motor.Path.Length..km. + Greenspace.Area..km2. + River.Length..km. + Mean.NDVI, data=Bird) 
+Diversity <- betareg(diversity ~ Motor.Path.Length..km. + Greenspace.Area..km2. + River.Length..km. + Mean.NDVI, data=Bird) 
+Abundance <- lm(abundance ~ Motor.Path.Length..km.+ Greenspace.Area..km2. + River.Length..km. + Mean.NDVI, data=Bird) 
+summary(Richness) # for richness
+summary(Diversity) # for diversity
+summary(Abundance) # for abundance
+Model_C <- mtable(Diversity, Richness,Abundance,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Model_C)
+file <- "Model_C.txt"
+write.mtable(Model_C, file = file)
+
+#Model C - MAM models
+Model_C <- Bird[, c(4,5,6, 18, 21:23)]
+Richness_MAM<-stepforR(Model_C$Richness,Model_C[, -c(1:3,6)], alpha = 0.2)
+Diversity_MAM <- betareg(diversity ~ Motor.Path.Length..km. + River.Length..km. + Mean.NDVI, data=Bird) 
+Abundance_MAM <-stepforR(Model_C$abundance,Model_C[, -c(1:3,5)], alpha = 0.2)
+summary(Richness_MAM) #relevant = Motor paths, partial sig = river lengths
+summary(Abundance_MAM) #relevant = arable, grassland, wetland, river length
+summary(Diversity_MAM) #relevant = conifer, Motor paths, mean NDVI, river lengths
+Model_C_MAM <- mtable(Diversity_MAM, Richness_MAM, Abundance_MAM,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Model_C_MAM)
+file <- "Model_C_MAM.txt"
+write.mtable(Model_C_MAM, file = file)
+rm(Abundance, Richness, Diversity, Richness_MAM, Diversity_MAM, Abundance_MAM, Model_C_MAM, 
+Model_C)
+
+#Model D - Pedestrian-based multiple regression - #no building area, motor paths, suburban
+Richness<- lm(Richness ~ Pedestrian.Path.Length..km.+ Greenspace.Area..km2. + River.Length..km. + Mean.NDVI, data=Bird) #variables
+Diversity <- betareg(diversity ~ Pedestrian.Path.Length..km.+ Greenspace.Area..km2. + River.Length..km. + Mean.NDVI, data=Bird) #variables
+Abundance <- lm(abundance ~ Pedestrian.Path.Length..km.+ Greenspace.Area..km2. + River.Length..km. + Mean.NDVI, data=Bird) #variables
+summary(Richness) # for richness, arable, river length, marginal sig = conifer
+summary(Diversity) # for diversity, grassland, pedestrian, mean NDVI, partial sig = arable
+summary(Abundance) # for abundance, arable, grassland, wetland, river length
+Model_D <- mtable(Diversity, Richness, Abundance,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Model_D)
+file <- "Model_D.txt"
+write.mtable(Model_D, file = file)
+
+#Model D - MAM models
+Model_D <- Bird[, c(4,5,6, 19, 21:23)]#variables
+Diversity_MAM <- betareg(diversity ~ Pedestrian.Path.Length..km. + River.Length..km. + Mean.NDVI, data=Bird)
+Richness_MAM<-stepforR(Model_D$Richness,Model_D[, -c(1:3)], alpha = 0.2 )
+Abundance_MAM<-stepforR(Model_D$abundance,Model_D[, -c(1:3)], alpha = 0.2 )
+summary(Richness_MAM) #pedestrian paths, river length, arable, marginal sig = conifer
+summary(Diversity_MAM) #conifer, pedestrian paths, mean ndvi, river lengths
+summary(Abundance_MAM) #arable, grassland, wetland, river length
+Model_D_MAM <- mtable(Diversity_MAM, Richness_MAM, Abundance_MAM,summary.stats=c("sigma","Rsquared","F","p","N"))
+write.mtable(Model_D_MAM)
+file <- "Model_D_MAM.txt"
+write.mtable(Model_D_MAM, file = file)
+rm(Abundance, Richness, Diversity, Richness_MAM, Diversity_MAM, Abundance_MAM, Model_D_MAM, 
+Model_D)
+
+#Model E - building and greenspace areas. no pedestrian paths, motor paths, suburban
+Richness <- lm(Richness ~ Building.Area..km2. + Greenspace.Area..km2. + River.Length..km. + Mean.NDVI, data=Bird) #variables
+Diversity <- betareg(diversity ~ Building.Area..km2. + Greenspace.Area..km2. + River.Length..km. + Mean.NDVI, data=Bird) #variables
+Abundance <- lm(abundance ~ Building.Area..km2. + Greenspace.Area..km2. + River.Length..km. + 
+Mean.NDVI, data=Bird) #variables
+summary(Richness)#broadleaf, building area, river length, partial sig = mean NDVI, wetland
+summary(Diversity)#mean NDVI, building area, arable, grassland
+summary(Abundance)#building area, river length, marginal sig = urban
+Model_E <- mtable(Diversity, Richness,Abundance,summary.stats=c("sigma","R-squared","F","p","N"))
+write.mtable(Model_E)
+file <- "Model_E.txt"
+write.mtable(Model_E, file = file)
+
+#Model E - MAM Models 
+Model_E<- Bird[, c(4,5,6, 20, 21:23)]
+Richness_MAM<-stepforR(Model_E$Richness,Model_E[, -c(1:3,6,7)], alpha = 0.2)
+Diversity_MAM <- betareg(diversity ~ Building.Area..km2. + Mean.NDVI, data=Bird) #variables
+Abundance_MAM<-stepforR(Model_E$abundance,Model_E[, -c(1:3,5)], alpha = 0.2)
+summary(Richness_MAM) #building area, marginal sig = river length
+summary(Diversity_MAM) #building area, mean NDVI, marginal sig = river length, conifer
+summary(Abundance_MAM) #building area, broadleaf, river length
+Model_E_MAM<- mtable(Diversity_MAM, Richness_MAM,Abundance_MAM,summary.stats=c("sigma","Rsquared","F","p","N"))
+write.mtable(Model_E_MAM)file <- "Model_E_MAM.txt"
+write.mtable(Model_E_MAM, file = file)
+rm(Abundance, Richness, Diversity, Richness_MAM, Diversity_MAM, Abundance_MAM, Model_E_MAM, 
+Model_E)
+
+#ANOVA of local categorical variables
+#Garden Size
+Richness <- aov(Richness ~ GARDEN_SIZE, data = Bird)
+summary(Richness)
+Diversity <- aov(diversity ~ GARDEN_SIZE, data = Bird)
+summary(Diversity)
+Abundance <- aov(abundance ~ GARDEN_SIZE, data = Bird)
+summary(Abundance)
+#Site type
+Richness <- aov(Richness ~ Site, data = Bird)
+summary(Richness)
+Diversity <- aov(diversity ~ Site, data = Bird)
+summary(Diversity)
+Abundance <- aov(abundance ~ Site, data = Bird)
+summary(Abundance)
+#Cat presence
+Richness <- aov(Richness ~ cat_presence, data = Bird)
+summary(Richness)
+Diversity <- aov(diversity ~ cat_presence, data = Bird)
+summary(Diversity)
+Abundance <- aov(abundance ~ cat_presence, data = Bird)
+summary(Abundance)
+
+#-------------------------------------------------------------------------------------------------
+#Principle Component Analysis 
+#improve Bird column names
+names(Bird)[5]<-"Diversity"
+names(Bird)[6]<-"Abundance"
+names(Bird)[18]<-"Motor_Paths"
+names(Bird)[19]<-"Pedestrian_Paths"
+names(Bird)[20]<-"Building_Area"
+names(Bird)[21]<-"Greenspace_Area"
+names(Bird)[22]<-"River_Length"
+
+#organise models 
+Model_A <- Bird[, c(2, 3, 4, 5, 6, 7, 8, 9, 10)]
+Model_B <- Bird[, c(4,5,6,11:17)]
+Model_C <- Bird[, c(4,5,6,11:15, 18, 21:23)]
+Model_D <- Bird[, c(4,5,6,11:15, 19, 21:23)]
+Model_E<- Bird[, c(4,5,6,11:15, 20, 21:23)]
+
+#quantify categorical variables in Model_A
+Model_A$Site <- ifelse(Model_A$Site == "S", "SS", Model_A$Site)
+Model_A <- Model_A %>% 
+mutate('2014' = ifelse(Model_A$year %in% "2014", 1, 0)) %>% 
+mutate('2015' = ifelse(Model_A$year %in% "2015", 1, 0)) %>% mutate(Summer = ifelse(Model_A$season %in% "Summer", 1, 0)) %>% 
+mutate(Winter = ifelse(Model_A$season %in% "Winter", 1, 0)) %>%
+mutate(L = ifelse(Model_A$GARDEN_SIZE %in% "L", 1, 0)) %>%
+mutate(M = ifelse(Model_A$GARDEN_SIZE %in% "M", 1, 0)) %>%
+mutate(S = ifelse(Model_A$GARDEN_SIZE %in% "S", 1, 0)) %>%
+mutate(R = ifelse(Model_A$Site %in% "R", 1, 0)) %>%
+mutate(SS = ifelse(Model_A$Site %in% "S", 1, 0)) %>%
+mutate(U = ifelse(Model_A$Site %in% "U", 1, 0)) 
+Model_A <- Model_A[, -c(1,2,6,9)]
+
+#improve Model_A column names
+names(Model_A)[4]<-"Cat_Presence"
+names(Model_A)[10]<-"Large_Gardens"
+names(Model_A)[11]<-"Medium_Gardens"
+names(Model_A)[12]<-"Small_Gardens"
+names(Model_A)[13]<-"Rural"
+names(Model_A)[14]<-"Suburban"
+names(Model_A)[15]<-"Urban"
+
+#Rename bird categories for improved PCA labelling
+Bird$GARDEN_SIZE <- ifelse(Bird$GARDEN_SIZE == "S", "Small", Bird$GARDEN_SIZE)
+Bird$GARDEN_SIZE <- ifelse(Bird$GARDEN_SIZE == "M", "Medium", Bird$GARDEN_SIZE)
+Bird$GARDEN_SIZE <- ifelse(Bird$GARDEN_SIZE == "L", "Large", Bird$GARDEN_SIZE)
+Bird$Site <- ifelse(Bird$Site == "R", "Rural", Bird$Site)
+Bird$Site <- ifelse(Bird$Site == "S", "Suburban", Bird$Site)
+Bird$Site <- ifelse(Bird$Site == "U", "Urban", Bird$Site)
+
+#Prepare models for PCA plots
+Model_A<- PCA(Model_A)
+Model_A<-prcomp(Model_A, center = TRUE,scale. = TRUE)
+PCA(Model_B)
+Model_B<-prcomp(Model_B, center = TRUE,scale. = TRUE)
+PCA(Model_C)
+Model_C<-prcomp(Model_C, center = TRUE,scale. = TRUE)
+PCA(Model_D)
+Model_D<-prcomp(Model_D, center = TRUE,scale. = TRUE)
+PCA(Model_E)
+Model_E<-prcomp(Model_E, center = TRUE,scale. = TRUE)
+
+#PCA plots
+B_Site<- ggbiplot(Model_B,ellipse=TRUE, groups=Bird$'Site', varname.size = 4.25) #pca by site
+print(B_Site + ggtitle("Landcover map (LCM) classifications by Site"))
+B_Garden<- ggbiplot(Model_B,ellipse=TRUE, groups=Bird$GARDEN_SIZE, varname.size = 4.25) #pca by site
+print(B_Garden + ggtitle("Landcover map (LCM) classifications by Garden Size"))
+C_Site<- ggbiplot(Model_C,ellipse=TRUE, groups=Bird$'Site', varname.size = 4.25) #pca by site
+print(C_Site + ggtitle("Motor paths by Site"))
+C_Garden<- ggbiplot(Model_C,ellipse=TRUE, groups=Bird$GARDEN_SIZE, varname.size = 4.25) #pca by site
+print(C_Garden + ggtitle("Motor paths by Garden Size"))
+D_Site<- ggbiplot(Model_D,ellipse=TRUE, groups=Bird$'Site', varname.size = 4.25) #pca by siteprint(D_Site + ggtitle("Pedestrian paths by Site"))
+D_Garden<- ggbiplot(Model_D,ellipse=TRUE, groups=Bird$GARDEN_SIZE, varname.size = 4.25) #pca by site
+print(D_Garden + ggtitle("Pedestrian paths by Garden Size"))
+E_Site<- ggbiplot(Model_E,ellipse=TRUE, groups=Bird$'Site', varname.size = 4.25) #pca by site
+print(E_Site + ggtitle("Building and greenspace areas by Site"))
+E_Garden<- ggbiplot(Model_E,ellipse=TRUE, groups=Bird$GARDEN_SIZE, varname.size = 4.25) #pca by site
+print(E_Garden + ggtitle("Building and greenspace areas by Garden Size"))
+rm(Model_A, Model_B, Model_C, Model_D, Model_E
